@@ -72,7 +72,7 @@ draw_key_feedback(Display *dpy, struct lock **locks, int screen)
   Window root_win;
 
   GC gc = XCreateGC(dpy, win, GCForeground, &gr_values);
-  XSetForeground(dpy, gc, _RGB(rand() %255, rand() %255, rand() %255));
+  XSetForeground(dpy, gc, _RGB(rand() %256, rand() %256, rand() %256));
 
   int _x, _y;
   unsigned int screen_width, screen_height, _b, _d;
@@ -85,13 +85,16 @@ draw_key_feedback(Display *dpy, struct lock **locks, int screen)
   unsigned int position_x = rand() % (blocks_count - width_in_blocks + 1);
   unsigned int position_y = rand() % (blocks_count - width_in_blocks + 1);
 
-  printf("position: %d %d  dimensions: %d %d\n", position_x*block_width, position_y*block_height, block_width*width_in_blocks, block_height*height_in_blocks);
-
   // Can optionally clear the blocks.
   if (clear_blocks)
     XClearWindow(dpy, win);
 
-  XFillRectangle(dpy, win, gc, position_x*block_width, position_y*block_height, block_width*width_in_blocks, block_height*height_in_blocks);
+  if (draw_diagonals) {
+    XDrawLine(dpy, win, gc, position_x*block_width, position_y*block_height, position_x*block_width + block_width*width_in_blocks, position_y*block_height + block_height*height_in_blocks);
+    XDrawLine(dpy, win, gc, position_x*block_width, position_y*block_height+1, position_x*block_width + block_width*width_in_blocks, position_y*block_height + block_height*height_in_blocks + 1);
+  } else {
+    XFillRectangle(dpy, win, gc, position_x*block_width, position_y*block_height, block_width*width_in_blocks, block_height*height_in_blocks);
+  }
 
 	XFreeGC(dpy, gc);
 }

@@ -18,6 +18,8 @@ static const int max_size_in_blocks = 3;
 // Clearing blocks is more secure, but won't create a mosaic
 // masterpiece.
 static short int clear_blocks = 0;
+// Draws diagonals instead of rectangles. Easier on the eyes.
+static short int draw_diagonals = 1;
 
 /* treat a cleared input like a wrong password (color) */
 static const int failonclear = 1;
