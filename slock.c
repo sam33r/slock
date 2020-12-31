@@ -19,6 +19,7 @@
 #include <X11/keysym.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
+#include <Imlib2.h>
 
 #include "arg.h"
 #include "util.h"
@@ -36,6 +37,7 @@ struct lock {
 	int screen;
 	Window root, win;
 	Pixmap pmap;
+  Pixmap bgmap;
 	unsigned long colors[NUMCOLS];
 };
 
@@ -232,16 +234,16 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
             draw_key_feedback(dpy, locks, screen);
 				break;
 			}
-			color = len ? INPUT : ((failure || failonclear) ? FAILED : INIT);
-			if (running && oldc != color) {
-				for (screen = 0; screen < nscreens; screen++) {
-					XSetWindowBackground(dpy,
-					                     locks[screen]->win,
-					                     locks[screen]->colors[color]);
-					XClearWindow(dpy, locks[screen]->win);
-				}
-				oldc = color;
-			}
+      color = len ? INPUT : ((failure || failonclear) ? FAILED : INIT);
+      if (running && oldc != color) {
+        for (screen = 0; screen < nscreens; screen++) {
+          if(locks[screen]->bgmap)
+            XSetWindowBackgroundPixmap(dpy, locks[screen]->win, locks[screen]->bgmap);
+          else
+            XSetWindowBackground(dpy, locks[screen]->win, locks[screen]->colors[0]);
+        }
+        oldc = color;
+      }
 		} else if (rr->active && ev.type == rr->evbase + RRScreenChangeNotify) {
 			rre = (XRRScreenChangeNotifyEvent*)&ev;
 			for (screen = 0; screen < nscreens; screen++) {
@@ -265,7 +267,7 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 }
 
 static struct lock *
-lockscreen(Display *dpy, struct xrandr *rr, int screen)
+lockscreen(Display *dpy, struct xrandr *rr, int screen,Imlib_Image *image, int use_bg_image)
 {
 	char curs[] = {0, 0, 0, 0, 0, 0, 0, 0};
 	int i, ptgrab, kbgrab;
@@ -286,6 +288,18 @@ lockscreen(Display *dpy, struct xrandr *rr, int screen)
 		lock->colors[i] = color.pixel;
 	}
 
+
+  if(image && use_bg_image == 1) {
+    lock->bgmap = XCreatePixmap(dpy, lock->root, DisplayWidth(dpy, lock->screen), DisplayHeight(dpy, lock->screen), DefaultDepth(dpy, lock->screen));
+    imlib_context_set_image(image);
+    imlib_context_set_display(dpy);
+    imlib_context_set_visual(DefaultVisual(dpy, lock->screen));
+    imlib_context_set_colormap(DefaultColormap(dpy, lock->screen));
+    imlib_context_set_drawable(lock->bgmap);
+    imlib_render_image_on_drawable(0, 0);
+    imlib_free_image();
+  }
+
 	/* init */
 	wa.override_redirect = 1;
 	wa.background_pixel = lock->colors[INIT];
@@ -300,6 +314,8 @@ lockscreen(Display *dpy, struct xrandr *rr, int screen)
 	invisible = XCreatePixmapCursor(dpy, lock->pmap, lock->pmap,
 	                                &color, &color, 0, 0);
 	XDefineCursor(dpy, lock->win, invisible);
+	if(lock->bgmap)
+		XSetWindowBackgroundPixmap(dpy, lock->win, lock->bgmap);
 
 	/* Try to grab mouse pointer *and* keyboard for 600ms, else fail the lock */
 	for (i = 0, ptgrab = kbgrab = -1; i < 6; i++) {
@@ -345,7 +361,7 @@ lockscreen(Display *dpy, struct xrandr *rr, int screen)
 static void
 usage(void)
 {
-	die("usage: slock [-v] [cmd [arg ...]]\n");
+  die("\nusage: slock [options]\noptions:\n\t-v\tPrint version and exit.\n\t-i\t<full path to image file to display>\n");
 }
 
 int
@@ -360,15 +376,27 @@ main(int argc, char **argv) {
 	Display *dpy;
 	int s, nlocks, nscreens;
 
-	ARGBEGIN {
-	case 'v':
-		fprintf(stderr, "slock-"VERSION"\n");
-		return 0;
-	default:
-		usage();
-	} ARGEND
+  Imlib_Image image;
+  int use_bg_image = 0;
+  int option = 0;
 
-	/* validate drop-user and -group */
+  while ((option = getopt(argc, argv,"vi:")) != -1) {
+    switch (option) {
+      case 'v' :
+        die("slock-"VERSION" mod-bgimage\n");
+        break;
+      case 'i' :
+        use_bg_image = 1;
+        image = imlib_load_image(optarg);
+        if(!image) {
+          die("slock: unable to load image.\n");
+        }		
+        break;
+      default: usage(); 
+    }
+  }
+
+  /* validate drop-user and -group */
 	errno = 0;
 	if (!(pwd = getpwnam(user)))
 		die("slock: getpwnam %s: %s\n", user,
@@ -411,7 +439,7 @@ main(int argc, char **argv) {
 	if (!(locks = calloc(nscreens, sizeof(struct lock *))))
 		die("slock: out of memory\n");
 	for (nlocks = 0, s = 0; s < nscreens; s++) {
-		if ((locks[s] = lockscreen(dpy, &rr, s)) != NULL)
+		if ((locks[s] = lockscreen(dpy, &rr, s, image, use_bg_image)) != NULL)
 			nlocks++;
 		else
 			break;
