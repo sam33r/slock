@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <X11/extensions/Xrandr.h>
@@ -57,10 +58,48 @@ die(const char *errstr, ...)
 	exit(1);
 }
 
+unsigned long _RGB(int r,int g, int b)
+{
+    return b + (g<<8) + (r<<16);
+}
+
+static void
+draw_key_feedback(Display *dpy, struct lock **locks, int screen)
+{
+  XGCValues gr_values;
+
+  Window win = locks[screen]->win;
+  Window root_win;
+
+  GC gc = XCreateGC(dpy, win, GCForeground, &gr_values);
+  XSetForeground(dpy, gc, _RGB(rand() %255, rand() %255, rand() %255));
+
+  int _x, _y;
+  unsigned int screen_width, screen_height, _b, _d;
+  XGetGeometry(dpy, win, &root_win, &_x, &_y, &screen_width, &screen_height, &_b, &_d);
+
+  unsigned int width_in_blocks = (rand() % (max_size_in_blocks - 1)) + 1;
+  unsigned int height_in_blocks = (rand() % (max_size_in_blocks - 1)) + 1;
+  unsigned int block_width = screen_width / blocks_count;
+  unsigned int block_height = screen_height / blocks_count;
+  unsigned int position_x = rand() % (blocks_count - width_in_blocks + 1);
+  unsigned int position_y = rand() % (blocks_count - width_in_blocks + 1);
+
+  printf("position: %d %d  dimensions: %d %d\n", position_x*block_width, position_y*block_height, block_width*width_in_blocks, block_height*height_in_blocks);
+
+  // Can optionally clear the blocks.
+  if (clear_blocks)
+    XClearWindow(dpy, win);
+
+  XFillRectangle(dpy, win, gc, position_x*block_width, position_y*block_height, block_width*width_in_blocks, block_height*height_in_blocks);
+
+	XFreeGC(dpy, gc);
+}
+
+
 #ifdef __linux__
 #include <fcntl.h>
 #include <linux/oom.h>
-
 static void
 dontkillme(void)
 {
@@ -185,6 +224,9 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 					memcpy(passwd + len, buf, num);
 					len += num;
 				}
+        if (blocks_enabled)
+          for (screen = 0; screen < nscreens; screen++)
+            draw_key_feedback(dpy, locks, screen);
 				break;
 			}
 			color = len ? INPUT : ((failure || failonclear) ? FAILED : INIT);
@@ -355,6 +397,9 @@ main(int argc, char **argv) {
 	if (setuid(duid) < 0)
 		die("slock: setuid: %s\n", strerror(errno));
 
+  time_t t;
+  srand((unsigned) time (&t));
+
 	/* check for Xrandr support */
 	rr.active = XRRQueryExtension(dpy, &rr.evbase, &rr.errbase);
 
@@ -393,3 +438,4 @@ main(int argc, char **argv) {
 
 	return 0;
 }
+
