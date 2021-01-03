@@ -72,14 +72,13 @@ draw_key_feedback(Display *dpy, struct lock **locks, int screen)
   Window root_win;
 
   GC gc = XCreateGC(dpy, win, GCForeground, &gr_values);
-  XSetForeground(dpy, gc, _RGB(rand() %256, rand() %256, rand() %256));
 
   int _x, _y;
   unsigned int screen_width, screen_height, _b, _d;
   XGetGeometry(dpy, win, &root_win, &_x, &_y, &screen_width, &screen_height, &_b, &_d);
 
-  unsigned int width_in_blocks = (rand() % (max_size_in_blocks - 1)) + 1;
-  unsigned int height_in_blocks = (rand() % (max_size_in_blocks - 1)) + 1;
+  unsigned int width_in_blocks = (rand() % max_size_in_blocks) + 1;
+  unsigned int height_in_blocks = (rand() % max_size_in_blocks) + 1;
   unsigned int block_width = screen_width / blocks_count;
   unsigned int block_height = screen_height / blocks_count;
   unsigned int position_x = rand() % (blocks_count - width_in_blocks + 1);
@@ -89,13 +88,41 @@ draw_key_feedback(Display *dpy, struct lock **locks, int screen)
   if (clear_blocks)
     XClearWindow(dpy, win);
 
-  if (draw_diagonals) {
-    XDrawLine(dpy, win, gc, position_x*block_width, position_y*block_height, position_x*block_width + block_width*width_in_blocks, position_y*block_height + block_height*height_in_blocks);
-    XDrawLine(dpy, win, gc, position_x*block_width, position_y*block_height+1, position_x*block_width + block_width*width_in_blocks, position_y*block_height + block_height*height_in_blocks + 1);
-  } else {
-    XFillRectangle(dpy, win, gc, position_x*block_width, position_y*block_height, block_width*width_in_blocks, block_height*height_in_blocks);
+  const unsigned int inset = 10;
+  unsigned int iterations = rand() %5;
+  unsigned int i;
+  for (i=0; i<iterations; ++i) {
+    if (rand() %2) {
+      unsigned int x_coords[] = {
+        position_x*block_width,
+        position_x*block_width + block_width*width_in_blocks,
+        position_x*block_width + block_width*width_in_blocks,
+        position_x*block_width
+      };
+      unsigned int y_coords[] = {
+        position_y*block_height,
+        position_y*block_height,
+        position_y*block_height + block_height*height_in_blocks,
+        position_y*block_height + block_height*height_in_blocks
+      };
+      unsigned int first_coord = rand() % 4;
+      unsigned int second_coord = (first_coord + 1) % 4;
+      XSetForeground(dpy, gc, _RGB(255, 255, 255));
+      XSetLineAttributes(dpy, gc, inset, LineSolid, CapButt, JoinBevel);
+      XDrawLine(dpy, win, gc,
+                x_coords[first_coord],
+                y_coords[first_coord],
+                x_coords[second_coord],
+                y_coords[second_coord]);
+    } else {
+      XSetForeground(dpy, gc, _RGB(rand() %256, rand() %256, rand() %256));
+      XFillRectangle(dpy, win, gc,
+                     position_x*block_width + inset,
+                     position_y*block_height + inset,
+                     block_width*width_in_blocks - inset*2,
+                     block_height*height_in_blocks - inset*2);
+    }
   }
-
 	XFreeGC(dpy, gc);
 }
 
@@ -441,4 +468,3 @@ main(int argc, char **argv) {
 
 	return 0;
 }
-
